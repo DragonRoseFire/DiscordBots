@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/discord-bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "discord.js": "^14.18.0",
+    "@discordjs/voice": "^0.18.0",
+    "@discordjs/opus": "^0.10.0",
+    "ytdl-core": "^4.11.5",
+    "play-dl": "^1.9.7",
+    "sodium-native": "^4.3.3",
+    "drizzle-orm": "catalog:",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "~5.9.2"
+  }
+}
