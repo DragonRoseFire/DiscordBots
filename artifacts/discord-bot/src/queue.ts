@@ -2,6 +2,7 @@ import {
   AudioPlayer,
   AudioPlayerStatus,
   VoiceConnection,
+  StreamType,
   createAudioPlayer,
   createAudioResource,
   entersState,
@@ -9,6 +10,7 @@ import {
 } from "@discordjs/voice";
 import { Message, TextChannel } from "discord.js";
 import play from "play-dl";
+import { spawn } from "child_process";
 
 export interface Track {
   url: string;
@@ -205,9 +207,29 @@ async function playNext(guildId: string): Promise<void> {
   queue.isPlaying = true;
 
   try {
-    const stream = await play.stream(track.url, { quality: 2 });
-    const resource = createAudioResource(stream.stream, {
-      inputType: stream.type,
+    const playdlStream = await play.stream(track.url, { quality: 2 });
+
+    const ffmpeg = spawn("ffmpeg", [
+      "-i", "pipe:0",
+      "-analyzeduration", "0",
+      "-loglevel", "warning",
+      "-acodec", "libopus",
+      "-f", "ogg",
+      "-ar", "48000",
+      "-ac", "2",
+      "-b:a", "128k",
+      "pipe:1",
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+
+    playdlStream.stream.pipe(ffmpeg.stdin!);
+
+    ffmpeg.stderr?.on("data", (d: Buffer) => {
+      const msg = d.toString().trim();
+      if (msg) console.log("[ffmpeg music]", msg);
+    });
+
+    const resource = createAudioResource(ffmpeg.stdout!, {
+      inputType: StreamType.OggOpus,
     });
 
     queue.player.play(resource);

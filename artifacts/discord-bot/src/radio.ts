@@ -77,9 +77,11 @@ function createFfmpegStream(url: string) {
     "-i", url,
     "-analyzeduration", "0",
     "-loglevel", "warning",
-    "-f", "s16le",
+    "-acodec", "libopus",
+    "-f", "ogg",
     "-ar", "48000",
     "-ac", "2",
+    "-b:a", "128k",
     "pipe:1",
   ], { stdio: ["ignore", "pipe", "pipe"] });
 
@@ -136,7 +138,7 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
     });
 
     const resource = createAudioResource(ffmpeg.stdout, {
-      inputType: StreamType.Raw,
+      inputType: StreamType.OggOpus,
     });
 
     connection.subscribe(player);
