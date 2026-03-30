@@ -50,6 +50,28 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 ## Packages
 
+### `artifacts/discord-bot` (`@workspace/discord-bot`)
+
+Discord Task Management Bot using discord.js v14. Runs as a standalone background process.
+
+- Entry: `src/index.ts` — starts the Discord client, registers slash commands, starts reminder job
+- Commands: `src/commands/` — one file per slash command
+- Handlers: `src/handlers/interaction.ts` — routes interactions to correct command handlers
+- Jobs: `src/jobs/reminders.ts` — hourly cron-like check for overdue/due-soon tasks
+- Utils: `src/utils/` — date parsing (German format DD.MM.YYYY), embed builders
+- Requires: `DISCORD_BOT_TOKEN` secret
+- `pnpm --filter @workspace/discord-bot run dev` — start bot with hot-reload
+
+#### Slash Commands:
+- `/aufgabe` — Create a new task (title required, all other fields optional)
+- `/aufgaben` — List tasks with filter (open/mine/done/all)
+- `/aufgabe-info` — Show task details by ID
+- `/übernehmen` — Take over a task (assigns you + sets in_progress)
+- `/erledigt` — Mark task as done
+- `/aufgabe-bearbeiten` — Edit existing task (creator/admin only)
+- `/aufgabe-löschen` — Delete task (creator/admin only)
+- `/hilfe` — Show help embed
+
 ### `artifacts/api-server` (`@workspace/api-server`)
 
 Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
