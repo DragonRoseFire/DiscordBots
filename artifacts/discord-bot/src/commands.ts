@@ -1,4 +1,5 @@
 import { Message, TextChannel, PermissionFlagsBits } from "discord.js";
+import { playRadio, stopRadio, listStations, getRadioState } from "./radio.js";
 import {
   addAndPlay,
   skipTrack,
@@ -21,6 +22,12 @@ import {
 
 const HELP_TEXT = `
 🎵 **Music Bot Commands**
+
+**Radio**
+\`!radio play <station>\` — Stream a live radio station in your voice channel
+\`!radio stop\` — Stop the radio
+\`!radio list\` — Show all available stations
+\`!radio now\` — Show what's currently on
 
 **Moderation**
 \`!clear <1-100>\` — Delete the last X messages in this channel (default: 10)
@@ -61,6 +68,52 @@ export async function handleCommand(
   const guildId = message.guild.id;
 
   switch (command) {
+    case "radio": {
+      const sub = args.shift()?.toLowerCase();
+      switch (sub) {
+        case "play": {
+          const stationKey = args.join(" ").trim();
+          if (!stationKey) {
+            await message.reply(
+              `Please specify a station. Usage: \`!radio play <station>\`\n\nType \`!radio list\` to see all available stations.`
+            );
+            return;
+          }
+          await playRadio(message, stationKey);
+          break;
+        }
+        case "stop": {
+          const stopped = stopRadio(guildId);
+          if (stopped) {
+            await message.reply(`📻 Stopped radio: **${stopped.name}**.`);
+          } else {
+            await message.reply("No radio is playing right now.");
+          }
+          break;
+        }
+        case "list":
+        case "stations": {
+          await message.reply(`📻 **Available Radio Stations:**\n${listStations()}\n\nPlay one with \`!radio play <station name>\``);
+          break;
+        }
+        case "now":
+        case "np": {
+          const state = getRadioState(guildId);
+          if (!state) {
+            await message.reply("No radio is playing right now.");
+          } else {
+            await message.reply(`📻 Currently streaming: **${state.station.name}** — *${state.station.genre}*`);
+          }
+          break;
+        }
+        default:
+          await message.reply(
+            "Usage:\n`!radio play <station>` — Start a station\n`!radio stop` — Stop radio\n`!radio list` — Show all stations\n`!radio now` — Current station"
+          );
+      }
+      break;
+    }
+
     case "clear":
     case "purge":
     case "prune": {
