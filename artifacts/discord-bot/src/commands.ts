@@ -1,4 +1,4 @@
-import { Message } from "discord.js";
+import { Message, TextChannel, PermissionFlagsBits } from "discord.js";
 import {
   addAndPlay,
   skipTrack,
@@ -21,6 +21,9 @@ import {
 
 const HELP_TEXT = `
 🎵 **Music Bot Commands**
+
+**Moderation**
+\`!clear <1-100>\` — Delete the last X messages in this channel (default: 10)
 
 **Playback**
 \`!play <song or URL>\` — Search and play a song
@@ -58,6 +61,47 @@ export async function handleCommand(
   const guildId = message.guild.id;
 
   switch (command) {
+    case "clear":
+    case "purge":
+    case "prune": {
+      const channel = message.channel as TextChannel;
+
+      if (!message.member?.permissions.has(PermissionFlagsBits.ManageMessages)) {
+        await message.reply("❌ You need the **Manage Messages** permission to use this command.");
+        return;
+      }
+
+      const botMember = message.guild!.members.me;
+      if (!botMember?.permissions.has(PermissionFlagsBits.ManageMessages)) {
+        await message.reply("❌ I need the **Manage Messages** permission to delete messages.");
+        return;
+      }
+
+      const amount = args[0] ? parseInt(args[0], 10) : 10;
+
+      if (isNaN(amount) || amount < 1 || amount > 100) {
+        await message.reply("Please provide a number between 1 and 100. Usage: `!clear <1-100>`");
+        return;
+      }
+
+      try {
+        const deleted = await channel.bulkDelete(amount + 1, true);
+        const count = deleted.size - 1;
+        const reply = await channel.send(
+          `🗑️ Deleted **${count}** message${count !== 1 ? "s" : ""}.`
+        );
+        setTimeout(() => reply.delete().catch(() => {}), 5000);
+      } catch (err: any) {
+        if (err?.code === 50034) {
+          await message.reply("❌ Cannot delete messages older than 14 days.");
+        } else {
+          await message.reply("❌ Failed to delete messages.");
+          console.error("bulkDelete error:", err);
+        }
+      }
+      break;
+    }
+
     case "play":
     case "p": {
       if (args.length === 0) {
