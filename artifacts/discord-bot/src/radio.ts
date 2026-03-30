@@ -22,6 +22,9 @@ export const STATIONS: Record<string, RadioStation> = {
   "antenne bayern":       { name: "Antenne Bayern",       url: "https://s1-webradio.antenne.de/antenne",             genre: "Pop/Rock" },
   "antenne":              { name: "Antenne Bayern",       url: "https://s1-webradio.antenne.de/antenne",             genre: "Pop/Rock" },
   "1live":                { name: "1LIVE",                url: "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3", genre: "Pop/Rock" },
+  "1 live":               { name: "1LIVE",                url: "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3", genre: "Pop/Rock" },
+  "einslive":             { name: "1LIVE",                url: "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3", genre: "Pop/Rock" },
+  "eins live":            { name: "1LIVE",                url: "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3", genre: "Pop/Rock" },
   "ndr":                  { name: "NDR 2",                url: "https://ndr-ndr2-live.sslcast.addradio.de/ndr/ndr2/live/mp3/128/stream.mp3", genre: "Pop" },
   "ndr 2":                { name: "NDR 2",                url: "https://ndr-ndr2-live.sslcast.addradio.de/ndr/ndr2/live/mp3/128/stream.mp3", genre: "Pop" },
   "swr3":                 { name: "SWR3",                 url: "https://liveradio.swr.de/sw282p3/swr3/play.mp3",     genre: "Pop/Rock" },
@@ -99,11 +102,12 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
     return;
   }
 
-  const station = STATIONS[stationKey.toLowerCase()];
+  const normalized = stationKey.toLowerCase().replace(/\s+/g, "");
+  const station = STATIONS[stationKey.toLowerCase()] ?? STATIONS[normalized];
   if (!station) {
     const available = listStations();
     await message.reply(
-      `❌ Unknown station **${stationKey}**.\n\nAvailable stations:\n${available}\n\nUsage: \`!radio play <station>\``
+      `❌ Sender **${stationKey}** nicht gefunden.\n\nVerfügbare Sender:\n${available}\n\nBeispiel: \`!radio play 1live\``
     );
     return;
   }
@@ -114,7 +118,7 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
   if (existing) {
     existing.ffmpegProcess?.kill("SIGKILL");
     existing.player.stop();
-    existing.connection.destroy();
+    try { existing.connection.destroy(); } catch {}
     radioPlayers.delete(guildId);
   }
 
@@ -194,7 +198,7 @@ export function stopRadio(guildId: string): RadioStation | null {
   if (!state) return null;
   state.ffmpegProcess?.kill("SIGKILL");
   state.player.stop();
-  state.connection.destroy();
+  try { state.connection.destroy(); } catch {}
   radioPlayers.delete(guildId);
   return state.station;
 }
