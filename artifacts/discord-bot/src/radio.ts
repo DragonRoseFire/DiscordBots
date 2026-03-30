@@ -7,10 +7,10 @@ import {
   createAudioResource,
   entersState,
   joinVoiceChannel,
+  NoSubscriberBehavior,
 } from "@discordjs/voice";
 import { Message, TextChannel } from "discord.js";
-import https from "https";
-import http from "http";
+import { spawn } from "child_process";
 
 export interface RadioStation {
   name: string;
@@ -25,7 +25,6 @@ export const STATIONS: Record<string, RadioStation> = {
   "ndr":                  { name: "NDR 2",                url: "https://ndr-ndr2-live.sslcast.addradio.de/ndr/ndr2/live/mp3/128/stream.mp3", genre: "Pop" },
   "ndr 2":                { name: "NDR 2",                url: "https://ndr-ndr2-live.sslcast.addradio.de/ndr/ndr2/live/mp3/128/stream.mp3", genre: "Pop" },
   "swr3":                 { name: "SWR3",                 url: "https://liveradio.swr.de/sw282p3/swr3/play.mp3",     genre: "Pop/Rock" },
-  "Bayern 3":             { name: "Bayern 3",             url: "https://br-br3-live.cast.addradio.de/br/br3/live/mp3/128/stream.mp3", genre: "Pop" },
   "bayern 3":             { name: "Bayern 3",             url: "https://br-br3-live.cast.addradio.de/br/br3/live/mp3/128/stream.mp3", genre: "Pop" },
   "top 40":               { name: "Radio Top 40",         url: "https://streams.rautemusik.fm/top40",                genre: "Top 40" },
   "rautemusik":           { name: "RauteMusik",           url: "https://streams.rautemusik.fm/main",                 genre: "Mainstream" },
@@ -41,7 +40,7 @@ export const STATIONS: Record<string, RadioStation> = {
   "deep house":           { name: "RauteMusik House",     url: "https://streams.rautemusik.fm/deephouse",            genre: "Deep House" },
   "house":                { name: "RauteMusik House",     url: "https://streams.rautemusik.fm/deephouse",            genre: "House" },
   "hip hop":              { name: "RauteMusik Hip-Hop",   url: "https://streams.rautemusik.fm/hiphop",               genre: "Hip-Hop" },
-  "hiphop":               { name: "RauteMusik Hip-Hop",   url: "https://streams.rautemusik.fm/hiphop",              genre: "Hip-Hop" },
+  "hiphop":               { name: "RauteMusik Hip-Hop",   url: "https://streams.rautemusik.fm/hiphop",               genre: "Hip-Hop" },
   "rap":                  { name: "RauteMusik Hip-Hop",   url: "https://streams.rautemusik.fm/hiphop",               genre: "Hip-Hop" },
   "rock":                 { name: "RauteMusik Rock",      url: "https://streams.rautemusik.fm/rock",                 genre: "Rock" },
   "country":              { name: "RauteMusik Country",   url: "https://streams.rautemusik.fm/country",              genre: "Country" },
@@ -60,6 +59,7 @@ interface RadioState {
   connection: VoiceConnection;
   station: RadioStation;
   textChannel: TextChannel;
+  ffmpegProcess: ReturnType<typeof spawn> | null;
 }
 
 const radioPlayers = new Map<string, RadioState>();
@@ -68,25 +68,27 @@ export function getRadioState(guildId: string): RadioState | undefined {
   return radioPlayers.get(guildId);
 }
 
-function fetchStream(url: string): Promise<NodeJS.ReadableStream> {
-  return new Promise((resolve, reject) => {
-    const client = url.startsWith("https") ? https : http;
-    const req = client.get(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; DiscordBot)" } }, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        fetchStream(res.headers.location).then(resolve).catch(reject);
-        return;
-      }
-      if (res.statusCode && res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      resolve(res);
-    });
-    req.on("error", reject);
-    req.setTimeout(8000, () => {
-      req.destroy(new Error("Request timed out"));
-    });
+function createFfmpegStream(url: string) {
+  const ffmpeg = spawn("ffmpeg", [
+    "-reconnect", "1",
+    "-reconnect_streamed", "1",
+    "-reconnect_delay_max", "5",
+    "-user_agent", "Mozilla/5.0 (compatible; DiscordBot)",
+    "-i", url,
+    "-analyzeduration", "0",
+    "-loglevel", "warning",
+    "-f", "s16le",
+    "-ar", "48000",
+    "-ac", "2",
+    "pipe:1",
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+
+  ffmpeg.stderr?.on("data", (d: Buffer) => {
+    const msg = d.toString().trim();
+    if (msg) console.log("[ffmpeg radio]", msg);
   });
+
+  return ffmpeg;
 }
 
 export async function playRadio(message: Message, stationKey: string): Promise<void> {
@@ -97,10 +99,7 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
 
   const station = STATIONS[stationKey.toLowerCase()];
   if (!station) {
-    const available = Object.values(STATIONS)
-      .filter((s, i, arr) => arr.findIndex((x) => x.name === s.name) === i)
-      .map((s) => `• **${s.name}** — ${s.genre}`)
-      .join("\n");
+    const available = listStations();
     await message.reply(
       `❌ Unknown station **${stationKey}**.\n\nAvailable stations:\n${available}\n\nUsage: \`!radio play <station>\``
     );
@@ -111,6 +110,7 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
 
   const existing = radioPlayers.get(guildId);
   if (existing) {
+    existing.ffmpegProcess?.kill("SIGKILL");
     existing.player.stop();
     existing.connection.destroy();
     radioPlayers.delete(guildId);
@@ -119,7 +119,11 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
   await message.reply(`📻 Connecting to **${station.name}** (${station.genre})...`);
 
   try {
-    const stream = await fetchStream(station.url);
+    const ffmpeg = createFfmpegStream(station.url);
+
+    if (!ffmpeg.stdout) {
+      throw new Error("ffmpeg stdout unavailable");
+    }
 
     const connection = joinVoiceChannel({
       channelId: message.member.voice.channel.id,
@@ -127,52 +131,66 @@ export async function playRadio(message: Message, stationKey: string): Promise<v
       adapterCreator: message.guild!.voiceAdapterCreator,
     });
 
-    const player = createAudioPlayer();
-    const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+    const player = createAudioPlayer({
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
+    });
+
+    const resource = createAudioResource(ffmpeg.stdout, {
+      inputType: StreamType.Raw,
+    });
 
     connection.subscribe(player);
     player.play(resource);
 
-    await entersState(player, AudioPlayerStatus.Playing, 10_000);
+    await entersState(player, AudioPlayerStatus.Playing, 15_000);
 
-    radioPlayers.set(guildId, {
+    const state: RadioState = {
       player,
       connection,
       station,
       textChannel: message.channel as TextChannel,
-    });
+      ffmpegProcess: ffmpeg,
+    };
+    radioPlayers.set(guildId, state);
 
     player.on(AudioPlayerStatus.Idle, () => {
-      const state = radioPlayers.get(guildId);
-      if (state) {
-        state.textChannel.send(`📻 Radio stream ended for **${station.name}**.`);
-        state.connection.destroy();
+      const s = radioPlayers.get(guildId);
+      if (s) {
+        s.textChannel.send(`📻 Radio stream ended for **${station.name}**.`).catch(() => {});
+        s.ffmpegProcess?.kill("SIGKILL");
+        s.connection.destroy();
         radioPlayers.delete(guildId);
       }
     });
 
     player.on("error", (err) => {
-      console.error("Radio player error:", err);
-      const state = radioPlayers.get(guildId);
-      if (state) {
-        state.textChannel.send(`❌ Radio stream error: ${err.message}`);
-        state.connection.destroy();
+      console.error("Radio player error:", err.message);
+      const s = radioPlayers.get(guildId);
+      if (s) {
+        s.textChannel.send(`❌ Radio error: ${err.message}`).catch(() => {});
+        s.ffmpegProcess?.kill("SIGKILL");
+        s.connection.destroy();
         radioPlayers.delete(guildId);
       }
+    });
+
+    ffmpeg.on("error", (err) => {
+      console.error("ffmpeg process error:", err.message);
     });
 
     await (message.channel as TextChannel).send(
       `📻 Now streaming **${station.name}** — *${station.genre}*\nUse \`!radio stop\` to stop.`
     );
   } catch (err: any) {
-    console.error("Radio connect error:", err);
-    await message.reply(`❌ Failed to connect to **${station.name}**: ${err.message}`);
+    console.error("Radio connect error:", err.message);
+    await message.reply(`❌ Failed to stream **${station.name}**: ${err.message}`);
   }
 }
 
 export function stopRadio(guildId: string): RadioStation | null {
   const state = radioPlayers.get(guildId);
   if (!state) return null;
+  state.ffmpegProcess?.kill("SIGKILL");
   state.player.stop();
   state.connection.destroy();
   radioPlayers.delete(guildId);
@@ -183,7 +201,5 @@ export function listStations(): string {
   const unique = Object.values(STATIONS).filter(
     (s, i, arr) => arr.findIndex((x) => x.name === s.name) === i
   );
-  return unique
-    .map((s) => `• **${s.name}** — ${s.genre}`)
-    .join("\n");
+  return unique.map((s) => `• **${s.name}** — ${s.genre}`).join("\n");
 }
