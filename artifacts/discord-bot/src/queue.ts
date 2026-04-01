@@ -128,8 +128,9 @@ export async function addToQueue(
         return;
       }
       const video = results[0];
+      const videoUrl = video.url || `https://www.youtube.com/watch?v=${video.id}`;
       trackInfo = {
-        url: video.url,
+        url: videoUrl,
         title: video.title ?? "Unknown Title",
         duration: formatDuration(video.durationInSec ?? 0),
         requestedBy: message.author.username,
@@ -176,8 +177,9 @@ export async function addAndPlay(message: Message, query: string): Promise<void>
         return;
       }
       const video = results[0];
+      const videoUrl = video.url || `https://www.youtube.com/watch?v=${video.id}`;
       trackInfo = {
-        url: video.url,
+        url: videoUrl,
         title: video.title ?? "Unknown Title",
         duration: formatDuration(video.durationInSec ?? 0),
         requestedBy: message.author.username,
