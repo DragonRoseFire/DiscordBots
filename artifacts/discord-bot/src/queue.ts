@@ -208,6 +208,16 @@ async function playNext(guildId: string): Promise<void> {
   const track = queue.tracks[0];
   queue.isPlaying = true;
 
+  if (!track.url) {
+    console.error("Track URL is missing:", track);
+    queue.textChannel.send(`❌ Failed to play **${track.title}**: Invalid track data.`).catch(() => {});
+    queue.tracks.shift();
+    if (queue.tracks.length > 0) {
+      playNext(guildId);
+    }
+    return;
+  }
+
   try {
     const playdlStream = await play.stream(track.url, { quality: 2 });
 

@@ -24,8 +24,9 @@ async function resolveTrackInfo(query: string): Promise<{ url: string; title: st
       const results = await play.search(query, { source: { youtube: "video" }, limit: 1 });
       if (!results || results.length === 0) return null;
       const video = results[0];
+      const videoUrl = video.url || `https://www.youtube.com/watch?v=${video.id}`;
       return {
-        url: video.url,
+        url: videoUrl,
         title: video.title ?? "Unknown Title",
         duration: formatDuration(video.durationInSec ?? 0),
       };
