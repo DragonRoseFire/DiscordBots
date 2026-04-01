@@ -128,11 +128,33 @@ export async function addToQueue(
         return;
       }
       const video = results[0];
-      const videoUrl = video.url || `https://www.youtube.com/watch?v=${video.id}`;
+      let videoUrl = video.url;
+      let videoTitle = video.title ?? "Unknown Title";
+      let videoDuration = video.durationInSec ?? 0;
+      
+      if (!videoUrl && (video as any).id) {
+        videoUrl = `https://www.youtube.com/watch?v=${(video as any).id}`;
+      }
+      
+      if (videoUrl && play.yt_validate(videoUrl) === "video") {
+        try {
+          const info = await play.video_info(videoUrl);
+          videoTitle = info.video_details.title ?? videoTitle;
+          videoDuration = info.video_details.durationInSec ?? videoDuration;
+        } catch (e) {
+          console.warn("Could not get video info for", videoUrl);
+        }
+      }
+      
+      if (!videoUrl) {
+        if (!silent) await message.reply(`Found **${videoTitle}** but couldn't get a valid stream URL.`);
+        return;
+      }
+      
       trackInfo = {
         url: videoUrl,
-        title: video.title ?? "Unknown Title",
-        duration: formatDuration(video.durationInSec ?? 0),
+        title: videoTitle,
+        duration: formatDuration(videoDuration),
         requestedBy: message.author.username,
       };
     }
@@ -177,11 +199,33 @@ export async function addAndPlay(message: Message, query: string): Promise<void>
         return;
       }
       const video = results[0];
-      const videoUrl = video.url || `https://www.youtube.com/watch?v=${video.id}`;
+      let videoUrl = video.url;
+      let videoTitle = video.title ?? "Unknown Title";
+      let videoDuration = video.durationInSec ?? 0;
+      
+      if (!videoUrl && (video as any).id) {
+        videoUrl = `https://www.youtube.com/watch?v=${(video as any).id}`;
+      }
+      
+      if (videoUrl && play.yt_validate(videoUrl) === "video") {
+        try {
+          const info = await play.video_info(videoUrl);
+          videoTitle = info.video_details.title ?? videoTitle;
+          videoDuration = info.video_details.durationInSec ?? videoDuration;
+        } catch (e) {
+          console.warn("Could not get video info for", videoUrl);
+        }
+      }
+      
+      if (!videoUrl) {
+        await message.reply(`Found **${videoTitle}** but couldn't get a valid stream URL.`);
+        return;
+      }
+      
       trackInfo = {
         url: videoUrl,
-        title: video.title ?? "Unknown Title",
-        duration: formatDuration(video.durationInSec ?? 0),
+        title: videoTitle,
+        duration: formatDuration(videoDuration),
         requestedBy: message.author.username,
       };
     }
