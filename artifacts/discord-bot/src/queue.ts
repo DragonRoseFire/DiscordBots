@@ -252,17 +252,20 @@ async function playNext(guildId: string): Promise<void> {
   const track = queue.tracks[0];
   queue.isPlaying = true;
 
-  if (!track.url) {
-    console.error("Track URL is missing:", track);
-    queue.textChannel.send(`❌ Failed to play **${track.title}**: Invalid track data.`).catch(() => {});
+  console.log(`[playNext] Track:`, { url: track.url, title: track.title, urlType: typeof track.url });
+
+  if (!track.url || typeof track.url !== "string") {
+    console.error("❌ Track URL is missing or invalid:", track);
+    await queue.textChannel.send(`❌ Failed to play **${track.title}**: Invalid track data.`).catch(() => {});
     queue.tracks.shift();
     if (queue.tracks.length > 0) {
-      playNext(guildId);
+      await playNext(guildId);
     }
     return;
   }
 
   try {
+    console.log(`[playNext] Streaming URL:`, track.url);
     const playdlStream = await play.stream(track.url, { quality: 2 });
 
     const ffmpeg = spawn("ffmpeg", [
@@ -294,15 +297,15 @@ async function playNext(guildId: string): Promise<void> {
     await queue.textChannel.send(
       `🎵 Now playing: **${track.title}** [${track.duration}] — requested by ${track.requestedBy}`
     );
-  } catch (err) {
-    console.error("Error starting playback:", err);
+  } catch (err: any) {
+    console.error("❌ Error starting playback:", err?.message || err);
     await queue.textChannel.send(`Failed to play **${track.title}**. Skipping...`);
     queue.tracks.shift();
     if (queue.tracks.length > 0) {
-      playNext(guildId);
+      await playNext(guildId);
     } else {
       queue.isPlaying = false;
-      queue.connection.destroy();
+      try { queue.connection.destroy(); } catch {}
       queues.delete(guildId);
     }
   }
